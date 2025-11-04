@@ -1,1 +1,280 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Учет дефектов - Производство</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .form-container {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input, select, button {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        
+        input:focus, select:focus {
+            border-color: #3b82f6;
+            outline: none;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .checkbox-group input {
+            width: auto;
+        }
+        
+        .sr-warning {
+            color: #dc2626;
+            font-weight: bold;
+            margin-top: 5px;
+            display: none;
+        }
+        
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #2563eb;
+        }
+        
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            display: none;
+        }
+        
+        .success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+        
+        .error {
+            background: #fee2e2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+        
+        .offline {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📝 Учет дефектов</h1>
+        <p>Цех сборки сидений</p>
+    </div>
 
+    <div class="form-container">
+        <div class="form-group">
+            <label for="qrCode">QR-код изделия:</label>
+            <input type="text" id="qrCode" placeholder="Отсканируйте или введите QR-код" required>
+        </div>
+
+        <div class="form-group">
+            <label for="defectType">Тип дефекта:</label>
+            <select id="defectType" required>
+                <option value="">-- Выберите тип дефекта --</option>
+                <option value="loose_bolt">Недотянутый болт</option>
+                <option value="scratch">Царапина на поверхности</option>
+                <option value="missing_part">Отсутствующая деталь</option>
+                <option value="assembly_error">Ошибка сборки</option>
+                <option value="paint_defect">Дефект покраски</option>
+                <option value="other">Другое</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <div class="checkbox-group">
+                <input type="checkbox" id="srCharacteristic">
+                <label for="srCharacteristic">S/R характеристика (безопасность)</label>
+            </div>
+            <div class="sr-warning" id="srWarning">
+                ⚠️ Критический дефект! Требуется уведомление руководства
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="operation">Операция:</label>
+            <select id="operation" required>
+                <option value="">-- Выберите операцию --</option>
+                <option value="105">105 - Затяжка болта спинки</option>
+                <option value="220">220 - Затяжка катушки ремня</option>
+                <option value="230">230 - Затяжка винтов замка</option>
+                <option value="other">Другая операция</option>
+            </select>
+        </div>
+
+        <button onclick="submitDefect()" id="submitBtn">📤 Отправить дефект</button>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        // Service Worker регистрация для PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(() => console.log('Service Worker зарегистрирован'))
+                .catch(err => console.log('Ошибка регистрации Service Worker:', err));
+        }
+
+        // Обработка S/R характеристики
+        document.getElementById('srCharacteristic').addEventListener('change', function() {
+            document.getElementById('srWarning').style.display = this.checked ? 'block' : 'none';
+        });
+
+        // Функция отправки дефекта
+        async function submitDefect() {
+            const submitBtn = document.getElementById('submitBtn');
+            const statusDiv = document.getElementById('status');
+            
+            // Валидация формы
+            const qrCode = document.getElementById('qrCode').value.trim();
+            const defectType = document.getElementById('defectType').value;
+            const operation = document.getElementById('operation').value;
+            
+            if (!qrCode || !defectType || !operation) {
+                showStatus('Заполните все обязательные поля', 'error');
+                return;
+            }
+
+            const defectData = {
+                qr_code: qrCode,
+                defect_type: defectType,
+                sr_characteristic: document.getElementById('srCharacteristic').checked,
+                operation: operation,
+                shift: getCurrentShift(),
+                employee: 'Иванов' // TODO: добавить аутентификацию
+            };
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Отправка...';
+
+            try {
+                const response = await fetch('http://localhost:8000/api/defects', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(defectData)
+                });
+
+                if (response.ok) {
+                    showStatus('✅ Дефект успешно зарегистрирован!', 'success');
+                    resetForm();
+                } else {
+                    throw new Error('Ошибка сервера: ' + response.status);
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+                
+                // Офлайн-режим: сохраняем в localStorage
+                const offlineDefects = JSON.parse(localStorage.getItem('offlineDefects') || '[]');
+                offlineDefects.push({
+                    ...defectData,
+                    timestamp: new Date().toISOString(),
+                    synced: false
+                });
+                localStorage.setItem('offlineDefects', JSON.stringify(offlineDefects));
+                
+                showStatus('📴 Данные сохранены офлайн. Синхронизация при появлении сети', 'offline');
+                resetForm();
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '📤 Отправить дефект';
+            }
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function resetForm() {
+            document.getElementById('qrCode').value = '';
+            document.getElementById('defectType').value = '';
+            document.getElementById('srCharacteristic').checked = false;
+            document.getElementById('operation').value = '';
+            document.getElementById('srWarning').style.display = 'none';
+        }
+
+        function getCurrentShift() {
+            const hour = new Date().getHours();
+            if (hour >= 6 && hour < 14) return 'утро';
+            if (hour >= 14 && hour < 22) return 'вечер';
+            return 'ночь';
+        }
+    </script>
+</body>
+</html>
