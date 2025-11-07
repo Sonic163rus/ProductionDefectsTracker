@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 import sqlite3
-import datetime
+from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
 
@@ -111,3 +111,84 @@ async def get_defects():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# ДОБАВИТЬ В КОНЕЦ main.py:
+
+@app.get("/api/stats/summary")
+async def get_stats_summary():
+    conn = sqlite3.connect('defects.db')
+    cursor = conn.cursor()
+    
+    # Общее количество дефектов
+    cursor.execute("SELECT COUNT(*) FROM defects")
+    total = cursor.fetchone()[0]
+    
+    # Дефекты за сегодня
+    today = datetime.now().strftime('%Y-%m-%d')
+    cursor.execute("SELECT COUNT(*) FROM defects WHERE DATE(timestamp) = ?", (today,))
+    today_count = cursor.fetchone()[0]
+    
+    # Критические дефекты
+    cursor.execute("SELECT COUNT(*) FROM defects WHERE sr_characteristic = 1")
+    critical = cursor.fetchone()[0]
+    
+    conn.close()
+    
+    return {
+        "total_defects": total,
+        "today_defects": today_count, 
+        "critical_defects": critical,
+        "defect_rate": round((today_count / 1000) * 100, 2)  # 1000 изделий в день
+    }
+
+@app.get("/api/stats/by-type")
+async def get_stats_by_type():
+    conn = sqlite3.connect('defects.db')
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT defect_type, COUNT(*) as count 
+        FROM defects 
+        GROUP BY defect_type 
+        ORDER BY count DESC
+    """)
+    
+    result = [{"type": row[0], "count": row[1]} for row in cursor.fetchall()]
+    conn.close()
+    
+    return result
+
+@app.get("/api/stats/by-operation")
+async def get_stats_by_operation():
+    conn = sqlite3.connect('defects.db')
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT operation, COUNT(*) as count 
+        FROM defects 
+        GROUP BY operation 
+        ORDER BY count DESC
+    """)
+    
+    result = [{"operation": row[0], "count": row[1]} for row in cursor.fetchall()]
+    conn.close()
+    
+    return result
+
+@app.get("/api/stats/by-shift")
+async def get_stats_by_shift():
+    conn = sqlite3.connect('defects.db')
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT shift, COUNT(*) as count 
+        FROM defects 
+        GROUP BY shift 
+        ORDER BY count DESC
+    """)
+    
+    result = [{"shift": row[0], "count": row[1]} for row in cursor.fetchall()]
+    conn.close()
+    
+    return result
+
